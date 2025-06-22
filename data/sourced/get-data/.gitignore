@@ -1,0 +1,24 @@
+# Large dataset files - DO NOT commit to git
+*.dat
+*.dat.gz
+*.csv
+*.csv.gz
+
+# Keep only small sample files and documentation
+!sample_*.dat
+!sample_*.csv
+!README.md
+!*.sh
+!*.bat
+
+# Python cache files from our earlier downloads
+*.npz
+*.npy
+*.pkl
+*.pickle
+
+# Temporary files created by download scripts
+temp.py
+temp_download.py
+*.tmp
+*.temp 

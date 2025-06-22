@@ -1,0 +1,10 @@
+# Ignore large dataset files
+*.dat
+*.dat.gz
+*.csv
+
+# Keep small sample files and infrastructure
+!sample_*.dat
+!sample_*.csv
+!README.md
+!get-data/ 
