@@ -413,3 +413,4 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/scala,sbt,jupyternotebooks,intellij,visualstudiocode,python,macos,linux,windows,dotenv
+.vscode/settings.json

@@ -22,7 +22,7 @@ The full plan is outlined in our [Project Proposal](/docs/project-proposal.pdf).
 
 ## Repository Structure
 -   `/data`: For datasets used in testing and generated/saved data for analysis.
--   `/docker`: Dockerfiles for creating reproducible Spark environments (Spark 2.4 and 4.0).
+-   `/docker`: Self-contained Spark environments with auto-installers (Spark 2.4 and 4.0).
 -   `/docs`: For any project documentation, including the proposal and literature references.
 -   `/notebooks`: Jupyter/R notebooks for data analysis and result visualization.
 -   `/src`: All Scala source code for the Spark implementations.
@@ -31,4 +31,20 @@ The full plan is outlined in our [Project Proposal](/docs/project-proposal.pdf).
 
 ## Getting Started 
 
-(Work in Progress)
+  The instructions in `data/sourced/get-data/` for acquiring the datasets.
+
+  Run the launcher and choose your Spark version:
+  ```bash
+  launch-spark.bat
+  ```
+  - Choose [1] for Spark 4.0 (modern)
+  - Choose [2] for Spark 2.4 (baseline)
+
+  The launcher *should* automatically:
+  - Install Docker Desktop if needed
+  - Start Docker in the background  
+  - Build Spark images (first run: ~5-10 minutes)
+  - Launch the appropriate environment
+
+Datasets are available at `/workspace/data/sourced/` inside the container.
+
