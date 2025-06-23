@@ -25,7 +25,7 @@ REM Test Docker and capture exit code only
 docker --version >nul 2>&1
 if errorlevel 1 goto install_docker
 
-echo ✓ Docker CLI found
+echo Docker CLI found
 goto docker_ready
 
 :install_docker
@@ -51,7 +51,7 @@ if errorlevel 1 (
     exit /b 1
 )
 del "%installer_path%" >nul 2>&1
-echo ✓ Docker Desktop installed successfully!
+echo Docker Desktop installed successfully!
 
 goto docker_ready
 
@@ -62,10 +62,10 @@ docker info >nul 2>&1
 set docker_running=%errorlevel%
 
 if "%docker_running%"=="0" (
-    echo ✓ Docker Desktop is already running.
+    echo Docker Desktop is already running.
     goto after_docker_wait
 ) else (
-    echo ⚠ Docker Desktop is not running. Starting it now...
+    echo Docker Desktop is not running. Starting it now...
     
     REM Try multiple common locations for Docker Desktop
     set "docker_exe="
@@ -130,7 +130,7 @@ set wait_count=0
             exit /b 1
         )
     )
-    echo ✓ Docker Desktop is ready!
+    echo Docker Desktop is ready!
     endlocal
     exit /b 0
 

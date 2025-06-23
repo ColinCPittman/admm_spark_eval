@@ -37,8 +37,6 @@ The full plan is outlined in our [Project Proposal](/docs/project-proposal.pdf).
   ```bash
   launch-spark.bat
   ```
-  - Choose [1] for Spark 4.0 (modern)
-  - Choose [2] for Spark 2.4 (baseline)
 
   The launcher *should* automatically:
   - Install Docker Desktop if needed
@@ -47,4 +45,7 @@ The full plan is outlined in our [Project Proposal](/docs/project-proposal.pdf).
   - Launch the appropriate environment
 
 Datasets are available at `/workspace/data/sourced/` inside the container.
+
+## Acknowledgments
+Scala code implementations are adapted from [Spark-Optimization-ADMM](https://github.com/GMarzinotto/Spark-Optimization-ADMM) by GitHub user Gabriel Marzinotto.
 

@@ -365,6 +365,12 @@ project/plugins/project/
 ### Scala ###
 *.class
 
+# Scala CLI build directory
+.scala-build/
+
+# Metals language server
+.metals/
+
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 
