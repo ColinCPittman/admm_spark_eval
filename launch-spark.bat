@@ -5,7 +5,7 @@ echo ========================================
 echo Spark Docker Launcher
 echo ========================================
 echo Which Spark version?
-echo [1] Spark 4.0 (modern)
+echo [1] Spark 4.0 (Scala shell)
 echo [2] Spark 2.4 (baseline)
 echo.
 set /p choice="Enter 1 or 2: "
@@ -148,60 +148,18 @@ if errorlevel 1 (
 )
 
 if "%choice%"=="1" (
-    echo DEBUG: Entered choice 1 block
-    echo Starting Spark 4.0...
-    echo DEBUG: About to set COMPOSE_FILE variable
+    echo Starting Spark 4.0 Scala shell...
     set "COMPOSE_FILE=docker\docker-compose.yml"
-    echo DEBUG: COMPOSE_FILE set to: !COMPOSE_FILE!
-    echo DEBUG: Checking if file exists: !COMPOSE_FILE!
-    if not exist "!COMPOSE_FILE!" (
-        echo ERROR: !COMPOSE_FILE! not found!
-        echo DEBUG: Current directory contents:
-        dir
-        pause
-        exit /b 1
-    )
-    echo DEBUG: File exists, continuing...
-    echo Using compose file: !COMPOSE_FILE!
-    echo DEBUG: Current directory: %cd%
-    echo DEBUG: Running command: docker compose -f "!COMPOSE_FILE!" run --rm spark40 pyspark
-    echo.
-    echo ========================================
-    echo Launching Spark 4.0 PySpark shell...
-    echo Datasets mounted at /workspace/data
-    echo ========================================
-    echo.
-    
-    REM Try docker compose first, then fallback to docker-compose
-    docker compose -f "!COMPOSE_FILE!" run --rm spark40 pyspark
-    if errorlevel 1 (
-        echo.
-        echo WARNING: 'docker compose' failed, trying 'docker-compose'...
-        echo DEBUG: Running command: docker-compose -f "!COMPOSE_FILE!" run --rm spark40 pyspark
-        docker-compose -f "!COMPOSE_FILE!" run --rm spark40 pyspark
-        if errorlevel 1 (
-            echo.
-            echo ERROR: Failed to start Spark 4.0!
-            echo Possible causes:
-            echo 1. Docker images need to be built (first run takes 5-10 minutes)
-            echo 2. Service 'spark40' not found in compose file
-            echo 3. Docker Desktop not fully ready
-            echo.
-            echo DEBUG: Checking if compose file is readable...
-            type "!COMPOSE_FILE!"
-            echo.
-            pause
-        )
-    )
+    docker compose -f "!COMPOSE_FILE!" run --rm spark40 spark-shell
 ) else if "%choice%"=="2" (
     echo Starting Spark 2.4...
     set "COMPOSE_FILE=docker\docker-compose.yml"
-    if not exist "%COMPOSE_FILE%" (
-        echo ERROR: %COMPOSE_FILE% not found!
+    if not exist "!COMPOSE_FILE!" (
+        echo ERROR: !COMPOSE_FILE! not found!
         pause
         exit /b 1
     )
-    echo Using compose file: %COMPOSE_FILE%
+    echo Using compose file: !COMPOSE_FILE!
     echo.
     echo ========================================
     echo Launching Spark 2.4 Scala shell...
@@ -213,10 +171,10 @@ if "%choice%"=="1" (
     echo.
     
     REM Try docker compose first, then fallback to docker-compose
-    docker compose -f "%COMPOSE_FILE%" run --rm spark24 spark-shell
+    docker compose -f "!COMPOSE_FILE!" run --rm spark24 spark-shell
     if errorlevel 1 (
         echo WARNING: 'docker compose' failed, trying 'docker-compose'...
-        docker-compose -f "%COMPOSE_FILE%" run --rm spark24 spark-shell
+        docker-compose -f "!COMPOSE_FILE!" run --rm spark24 spark-shell
         if errorlevel 1 (
             echo.
             echo ERROR: Failed to start Spark 2.4!

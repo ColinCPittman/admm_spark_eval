@@ -16,6 +16,10 @@ RUN curl -O https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-$
     mv spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION} $SPARK_HOME && \
     rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz
 
+# Download Breeze library for Scala 2.11 compatibility with Spark 2.4.8 (default build)
+RUN curl -L -o $SPARK_HOME/jars/breeze_2.11-1.0.jar https://repo1.maven.org/maven2/org/scalanlp/breeze_2.11/1.0/breeze_2.11-1.0.jar && \
+    curl -L -o $SPARK_HOME/jars/breeze-natives_2.11-1.0.jar https://repo1.maven.org/maven2/org/scalanlp/breeze-natives_2.11/1.0/breeze-natives_2.11-1.0.jar
+
 RUN pip3 install numpy pandas
 
 WORKDIR /workspace
