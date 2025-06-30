@@ -50,7 +50,10 @@ launch-spark.bat
 
 Datasets are available at `/workspace/data/sourced/` inside the container.
 
-Currently :load is facing issues with scope, but `:paste /workspace/src/scala/ADMM.scala` does work.
+To load the ADMM implementation, use `:load` instead of `:paste` to avoid serialization issues:
+
+- **Spark 4.0**: `:load /workspace/src/scala/ADMM.scala`
+- **Spark 2.4**: `:load /workspace/src/scala/ADMM_spark24.scala`
 
 ## Acknowledgments
 

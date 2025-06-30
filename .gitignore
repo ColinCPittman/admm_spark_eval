@@ -420,3 +420,11 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/scala,sbt,jupyternotebooks,intellij,visualstudiocode,python,macos,linux,windows,dotenv
 .vscode/settings.json
+
+# Additional Scala/SBT/Metals patterns
+project/build.properties
+project/metals.sbt
+project/.bloop/
+project/project/
+.bloop/
+.scala-build/
