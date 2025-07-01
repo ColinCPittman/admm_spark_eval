@@ -53,7 +53,64 @@ Datasets are available at `/workspace/data/sourced/` inside the container.
 To load the ADMM implementation, use `:load` instead of `:paste` to avoid serialization issues:
 
 - **Spark 4.0**: `:load /workspace/src/scala/ADMM.scala`
-- **Spark 2.4**: `:load /workspace/src/scala/ADMM_spark24.scala`
+- **Spark 2.4**: `:load /workspace/src/scala/SuADMM.scala`
+
+---
+
+## Running ADMM (SuADMM.scala)
+
+After loading `SuADMM.scala` in the Spark 2.4 shell, several convenience functions are available:
+
+### Basic Usage
+
+```scala
+// List all available datasets with file sizes
+listDatasets()
+
+// Run ADMM on any dataset (looks in /workspace/data/sourced/ automatically)
+runADMM("sample_rcv1.dat")
+
+// Run ADMM with custom parameters  
+runADMM("sample_rcv1.dat", numPartitions = 8, lambda = 0.05, maxIterations = 100)
+```
+
+### Interactive Mode
+
+```scala
+// Prompts you to select from available datasets
+runADMM_Interactive()
+```
+
+### Testing & Debugging
+
+```scala
+// Quick test with only 5 iterations (faster for debugging)
+testADMM("sample_rcv1.dat")
+
+// Get dataset info without running ADMM
+datasetInfo("sample_rcv1.dat")
+```
+
+### Specialized Functions
+
+```scala
+// Run on full RCV1 training dataset with optimized parameters
+runADMM_RCV1_Full()
+
+// Compare ADMM performance across multiple RCV1 datasets
+compareRCV1_Datasets()
+```
+
+### Parameters
+
+- `filename`: Dataset filename (automatically looks in `/workspace/data/sourced/`)
+- `numPartitions`: Number of Spark partitions (default: 4)
+- `lambda`: L2 regularization parameter (default: 0.1, as per Su et al. paper)
+- `maxIterations`: Maximum ADMM iterations (default: 50)
+- `outputPath`: Where to save model weights (auto-generated if not specified)
+
+Models are automatically saved to `/workspace/data/generated/` with descriptive filenames.
+
 
 ## Acknowledgments
 
