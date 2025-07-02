@@ -57,7 +57,7 @@ To load the ADMM implementation, use `:load` instead of `:paste` to avoid serial
 
 ---
 
-## Running ADMM (SuADMM.scala)
+## Running SuADMM.scala in Spark 2.4 shell
 
 After loading `SuADMM.scala` in the Spark 2.4 shell, several convenience functions are available:
 
@@ -100,6 +100,26 @@ runADMM_RCV1_Full()
 // Compare ADMM performance across multiple RCV1 datasets
 compareRCV1_Datasets()
 ```
+
+### Paper Reproduction & Accuracy Evaluation
+
+```scala
+// Enhanced ADMM with accuracy calculation (reproduces paper's experimental setup)
+runADMM_WithAccuracy("lyrl2004_vectors_test_pt0.dat")
+
+// Direct comparison between ADMM and MLlib (reproduces Table 1 from paper)
+compareADMM_vs_MLlib("lyrl2004_vectors_test_pt0.dat", numPartitions = 8)
+
+// Reproduce the exact experimental setup from Su et al. Table 1
+reproduceTable1()
+
+// Calculate accuracy for any trained model
+calculateAccuracy(testData, trainedModel)
+
+// Split dataset into training/testing sets (80/20 split like the paper)
+val (trainData, testData) = splitTrainTest(fullData, trainRatio = 0.8)
+```
+
 
 ### Parameters
 

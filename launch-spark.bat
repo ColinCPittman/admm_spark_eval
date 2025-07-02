@@ -161,31 +161,70 @@ if "%choice%"=="1" (
     )
     echo Using compose file: !COMPOSE_FILE!
     echo.
+
     echo ========================================
-    echo Launching Spark 2.4 Scala shell...
-    echo Datasets mounted at /workspace/data
-    echo.
-    echo NOTE: Using Scala shell due to Python 3.9 compatibility issues
-    echo with Spark 2.4. For Python development, use Spark 4.0.
+    echo [STEP A] Starting all Spark services...
     echo ========================================
-    echo.
-    
-    REM Try docker compose first, then fallback to docker-compose
-    docker compose -f "!COMPOSE_FILE!" run --rm spark24 spark-shell
+    docker compose -f "!COMPOSE_FILE!" up -d
     if errorlevel 1 (
-        echo WARNING: 'docker compose' failed, trying 'docker-compose'...
-        docker-compose -f "!COMPOSE_FILE!" run --rm spark24 spark-shell
+        echo ERROR: Failed to start the Spark services. Please check Docker.
+        pause
+        exit /b 1
+    )
+    echo Spark services are running in the background.
+    echo.
+    echo Waiting for Spark master to be ready...
+    timeout /t 5 /nobreak >nul
+    
+    REM Check if Spark master is actually running
+    echo Checking Spark master status...
+    docker exec spark-master jps | findstr Master
+    if errorlevel 1 (
+        echo WARNING: Spark Master process not detected. Waiting longer...
+        timeout /t 10 /nobreak >nul
+        docker exec spark-master jps | findstr Master
         if errorlevel 1 (
-            echo.
-            echo ERROR: Failed to start Spark 2.4!
-            echo Possible causes:
-            echo 1. Docker images need to be built (first run takes 5-10 minutes)
-            echo 2. Service 'spark24' not found in compose file
-            echo 3. Docker Desktop not fully ready
-            echo.
+            echo ERROR: Spark Master failed to start properly.
+            docker logs spark-master
             pause
+            exit /b 1
         )
     )
+    echo Spark Master is running!
+    
+    REM Test network connectivity
+    echo Testing network connectivity...
+    docker exec spark-2.4-env ping -c 1 spark-master
+    if errorlevel 1 (
+        echo ERROR: Cannot reach spark-master from spark-2.4-env
+        pause
+        exit /b 1
+    )
+    echo Network connectivity OK!
+    
+    REM Restart worker to clear any old executors
+    echo Restarting worker to clear old executors...
+    docker restart spark-worker >nul 2>&1
+    
+    REM Restart driver container to ensure no previous spark-shell is running
+    echo Restarting Spark 2.4 driver container...
+    docker restart spark-2.4-env >nul 2>&1
+    
+    timeout /t 5 /nobreak >nul
+    
+    echo ========================================
+    echo [STEP B] Connecting to the Spark 2.4 Scala shell...
+    echo ========================================
+    
+    REM Use docker exec for reliable connection
+    docker exec -it spark-2.4-env spark-shell
+    
+    echo.
+    echo ========================================
+    echo [STEP C] Shutting down all Spark services...
+    echo ========================================
+    docker compose -f "!COMPOSE_FILE!" down
+
 ) else (
     echo ERROR: Invalid choice '%choice%'. Please enter 1 or 2.
     pause

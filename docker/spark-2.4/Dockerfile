@@ -7,7 +7,7 @@ ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
 ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.7-src.zip:$PYTHONPATH
 
 RUN apt-get update && \
-    apt-get install -y curl python3 python3-pip && \
+    apt-get install -y curl python3 python3-pip procps iputils-ping netcat-openbsd net-tools && \
     ln -s /usr/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
 
