@@ -52,8 +52,8 @@ Datasets are available at `/workspace/data/sourced/` inside the container.
 
 To load the ADMM implementation, use `:load` instead of `:paste` to avoid serialization issues:
 
-- **Spark 4.0**: `:load /workspace/src/scala/ADMM.scala`
-- **Spark 2.4**: `:load /workspace/src/scala/SuADMM.scala`
+- **Spark 4.0**: :load /workspace/src/scala/ADMM.scala
+- **Spark 2.4**: :load /workspace/src/scala/SuADMM.scala
 
 ---
 
@@ -67,59 +67,12 @@ After loading `SuADMM.scala` in the Spark 2.4 shell, several convenience functio
 // List all available datasets with file sizes
 listDatasets()
 
-// Run ADMM on any dataset (looks in /workspace/data/sourced/ automatically)
-runADMM("sample_rcv1.dat")
+// Main function at the moment
+runADMM_WithAccuracy()
 
-// Run ADMM with custom parameters  
+// Run basic ADMM on any dataset (looks in /workspace/data/sourced/ automatically)
 runADMM("sample_rcv1.dat", numPartitions = 8, lambda = 0.05, maxIterations = 100)
 ```
-
-### Interactive Mode
-
-```scala
-// Prompts you to select from available datasets
-runADMM_Interactive()
-```
-
-### Testing & Debugging
-
-```scala
-// Quick test with only 5 iterations (faster for debugging)
-testADMM("sample_rcv1.dat")
-
-// Get dataset info without running ADMM
-datasetInfo("sample_rcv1.dat")
-```
-
-### Specialized Functions
-
-```scala
-// Run on full RCV1 training dataset with optimized parameters
-runADMM_RCV1_Full()
-
-// Compare ADMM performance across multiple RCV1 datasets
-compareRCV1_Datasets()
-```
-
-### Paper Reproduction & Accuracy Evaluation
-
-```scala
-// Enhanced ADMM with accuracy calculation (reproduces paper's experimental setup)
-runADMM_WithAccuracy("lyrl2004_vectors_test_pt0.dat")
-
-// Direct comparison between ADMM and MLlib (reproduces Table 1 from paper)
-compareADMM_vs_MLlib("lyrl2004_vectors_test_pt0.dat", numPartitions = 8)
-
-// Reproduce the exact experimental setup from Su et al. Table 1
-reproduceTable1()
-
-// Calculate accuracy for any trained model
-calculateAccuracy(testData, trainedModel)
-
-// Split dataset into training/testing sets (80/20 split like the paper)
-val (trainData, testData) = splitTrainTest(fullData, trainRatio = 0.8)
-```
-
 
 ### Parameters
 

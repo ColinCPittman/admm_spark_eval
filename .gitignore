@@ -428,3 +428,14 @@ project/.bloop/
 project/project/
 .bloop/
 .scala-build/
+
+# Project-specific: Large datasets and generated files
+data/sourced/*.dat
+data/sourced/*.binary
+data/sourced/*.csv
+!data/sourced/sample_higgs.csv
+data/generated/
+data/checkpoints/
+
+# Docker volumes and logs
+docker/volumes/
