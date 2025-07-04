@@ -68,23 +68,73 @@ services:
         reservations:
           memory: 8G
 
+  spark-master-40:
+    build:
+      context: ./spark-4.0
+      dockerfile: Dockerfile
+    container_name: spark-master-40
+    command: >
+      /bin/bash -c "
+      /opt/spark/sbin/start-master.sh &&
+      tail -f /dev/null
+      "
+    ports:
+      - "7078:7077"
+      - "8081:8080"
+    networks:
+      - sparknet
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+
+  spark-worker-40:
+    build:
+      context: ./spark-4.0
+      dockerfile: Dockerfile
+    container_name: spark-worker-40
+    command: >
+      /bin/bash -c "
+      /opt/spark/sbin/start-worker.sh spark://spark-master-40:7077 &&
+      tail -f /dev/null
+      "
+    depends_on:
+      - spark-master-40
+    volumes:
+      - ../data:/workspace/data
+      - ../src:/workspace/src
+      - ../notebooks:/workspace/notebooks
+    environment:
+      - SPARK_WORKER_CORES=4
+      - SPARK_WORKER_MEMORY=12g
+    networks:
+      - sparknet
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+
   spark40:
     build:
       context: ./spark-4.0
       dockerfile: Dockerfile
     container_name: spark-4.0-env
+    depends_on:
+      - spark-master-40
+      - spark-worker-40
     volumes:
       - ../data:/workspace/data
       - ../src:/workspace/src
       - ../notebooks:/workspace/notebooks
+      - ./conf/spark-defaults-40.conf:/opt/spark/conf/spark-defaults.conf
     ports:
       - "4040:4040"
-      - "7078:7077"
-      - "8081:8080"
-    environment:
-      - SPARK_MASTER_HOST=0.0.0.0
-      - SPARK_MASTER_PORT=7077
-      - SPARK_MASTER_WEBUI_PORT=8080
+    networks:
+      - sparknet
     working_dir: /workspace
     tty: true
     stdin_open: true
