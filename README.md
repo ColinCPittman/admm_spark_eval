@@ -6,10 +6,10 @@ This repository contains the source code, data, and analysis for a CS 7265 Big D
 
 **Team Members:**
 
+* Colin Pittman
 * Amonn Brewer
 * Jennifer Felton
-* Phillip Gregory
-* Colin Pittman
+* Phillip Gregory 
 
 ---
 
@@ -33,57 +33,91 @@ The full plan is outlined in our [Project Proposal](/docs/project-proposal.pdf).
 
 ## Getting Started
 
-  The instructions in `data/sourced/get-data/` for acquiring the datasets.
+1. **Get datasets** following instructions in `data/sourced/get-data/`
 
-  Run the launcher and choose your Spark version:
+2. **Running the launcher:**
+   
+   ```bash
+   launch-spark.bat
+   ```
 
-```bash
-launch-spark.bat
-```
+3. **Loading ADMM implementation in Spark shell:**
 
-  The launcher *should* automatically:
-
-- Install Docker Desktop if needed
-- Start Docker in the background  
-- Build Spark images (first run: ~5-10 minutes)
-- Launch the appropriate environment
-
-Datasets are available at `/workspace/data/sourced/` inside the container.
-
-To load the ADMM implementation, use `:load` instead of `:paste` to avoid serialization issues:
-
-- **Spark 4.0**: :load /workspace/src/scala/ADMM.scala
-- **Spark 2.4**: :load /workspace/src/scala/SuADMM.scala
-
----
-
-## Running SuADMM.scala in Spark 2.4 shell
-
-After loading `SuADMM.scala` in the Spark 2.4 shell, several convenience functions are available:
-
-### Basic Usage
+Spark 4.0.0:
 
 ```scala
-// List all available datasets with file sizes
-listDatasets()
-
-// Main function at the moment
-runADMM_WithAccuracy()
-
-// Run basic ADMM on any dataset (looks in /workspace/data/sourced/ automatically)
-runADMM("sample_rcv1.dat", numPartitions = 8, lambda = 0.05, maxIterations = 100)
+:load /workspace/src/scala/SuADMM_40.scala
 ```
 
-### Parameters
+Spark 2.4.8:
 
-- `filename`: Dataset filename (automatically looks in `/workspace/data/sourced/`)
-- `numPartitions`: Number of Spark partitions (default: 4)
-- `lambda`: L2 regularization parameter (default: 0.1, as per Su et al. paper)
-- `maxIterations`: Maximum ADMM iterations (default: 50)
-- `outputPath`: Where to save model weights (auto-generated if not specified)
+```scala
+:load /workspace/src/scala/SuADMM.scala
+```
 
-Models are automatically saved to `/workspace/data/generated/` with descriptive filenames.
+4. **Running experiments:**
+   
+   ```scala
+   // ADMM test
+   runADMM()
+   ```
 
+// MLlib LBFGS baseline test
+runLBFGS()
+
+```
+**Dataset Selection:**
+```scala
+// RCV1
+runADMM(dataset = "rcv1")
+runLBFGS(dataset = "rcv1")
+
+// HIGGS 
+runADMM(dataset = "higgs") 
+runLBFGS(dataset = "higgs")
+
+// Custom file override, if needed.
+runADMM(trainFilename = "custom_train.binary", testFilename = "custom_test.binary")
+```
+
+**Paper Reproduction Workflow:**
+
+```scala
+// Testing each partition counts used in Table 1 in Su's paper.
+val partitions = List(5, 8, 10, 15)
+for (p <- partitions) {
+  println(s"\nTest with $p partitions:")
+  runADMM(numPartitions = p)
+  runLBFGS(numPartitions = p)
+}
+```
+
+**Comparing Between Datasets:**
+
+```scala
+List("rcv1", "higgs").foreach { dataset =>
+  println(s"\n=== Dataset: ${dataset.toUpperCase()} ===")
+  runADMM(dataset = dataset)
+  runLBFGS(dataset = dataset)
+}
+```
+
+Both functions automatically save complete output information to `/data/generated/` with relevant filenames:
+
+- ADMM: `{version}_{train}_{test}_admm_{run}_{partitions}part_output.txt`
+- LBFGS: `{version}_{train}_{test}_lbfgs_{run}_{partitions}part_output.txt`
+
+Example: `4_0_15k_10k_admm_1_8part_output.txt` (Spark 4.0, 15k train, 10k test, ADMM, run 1, 8 partitions)
+
+Each output file contains:
+
+- Dataset information and parameters
+- Training progress and iteration details (for ADMM)
+- Final results (accuracy, runtime, iterations)
+- Model analysis (L2 norm, non-zero weights)
+- Complete model weights
+
+---
 
 ## Acknowledgments
 

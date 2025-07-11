@@ -1,0 +1,26 @@
+Dataset: HIGGS
+Loading training data from: /workspace/data/sourced/higgs_train15k.binary
+Loading test data from: /workspace/data/sourced/higgs_test10k.binary
+Using MLlib LogisticRegressionWithLBFGS for baseline comparison
+Training: 15000 samples, Testing: 10000 samples, Features: 27
+Training label distribution: Map(0.0 -> 7159, 1.0 -> 7841)
+
+============================================================
+STARTING LBFGS TRAINING
+============================================================
+
+============================================================
+LBFGS RESULTS
+============================================================
+Training Dataset: higgs_train15k.binary (15000 samples)
+Test Dataset: higgs_test10k.binary (10000 samples)
+Features: 27
+Runtime: 1.7 seconds
+Accuracy: 64.07%
+Iterations: 100 (fixed)
+Parameters: regParam=0.01, Partitions=8
+Model L2 norm: 2.775366, Non-zero weights: 27/27
+============================================================
+
+MODEL WEIGHTS:
+-0.005398957598506977,0.026396430526530592,-0.29601482809180807,-0.0030258313623977816,0.5806054156079743,0.020444360816703123,-0.01613174411416184,0.038494149292467264,0.23534531307647208,0.0037472032992743962,-0.003206308293251599,-0.054315763965249515,0.1371630564343344,-0.008965312855001562,0.015490580159736854,-0.054802775932700505,0.20991695385148806,0.017873523113903503,0.002590193014061687,-0.050505519426774094,-0.08481965460732772,0.5896283011391578,0.4006637129710247,0.5199287338887535,-0.8919643693400789,0.8359250265357533,-2.2062432947542527

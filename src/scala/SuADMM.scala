@@ -9,35 +9,28 @@ import breeze.numerics.sqrt
 import breeze.optimize.{DiffFunction, LBFGS}
 
 import java.io.PrintWriter
+import scala.collection.JavaConverters._
 
 /**
- * ============================================================================================
- * 1. DATA STRUCTURES & INTERFACES (as per UML Diagram)
- * ============================================================================================
+ * SPARK 2.4 COMPATIBLE VERSION OF SuADMM
+ * ================================================
+ * This version is identical to the working Spark 4.0 implementation
+ * with only the necessary compatibility fixes for Spark 2.4/Scala 2.11
+ * 
+ * 1. DATA STRUCTURES & INTERFACES
+ * ================================================
  */
 
-/**
- * Represents the state for a single data partition in the ADMM algorithm.
- * As described in the paper, each partition `j` maintains its own local model `w_j` and
- * a scaled dual variable `u_j`.
- *
- * @param localWeightVector_w  The local model parameters `w` for this partition.
- * @param scaledDualVariable_u The scaled dual variable `u` for this partition.
- */
+// local state for each partition in ADMM
 case class ADMMState(
     localWeightVector_w: DenseVector[Double],
     scaledDualVariable_u: DenseVector[Double]
 )
 
-/**
- * A trait (interface) for the ADMM update logic, as shown in the UML diagram.
- * This separates the core mathematical operations from the orchestration logic, allowing
- * different optimization problems (e.g., Lasso, SVM) to be implemented by creating new
- * classes that extend this trait.
- */
+// interface for different ADMM update strategies  
 trait ADMMUpdater extends Serializable {
 
-    /** Solves the subproblem for the local weight vector `w` on a single partition (Equation 3). */
+    // solve local w subproblem on partition
     def wUpdate(
         partitionData: Iterator[(Double, DenseVector[Double])],
         currentState: ADMMState,
@@ -45,7 +38,7 @@ trait ADMMUpdater extends Serializable {
         penaltyParameter_rho: Double
     ): ADMMState
 
-    /** Updates the global consensus variable `z` on the driver (Equation 4). */
+    // update global z on driver
     def zUpdate(
         averageLocalWeights_w_avg: DenseVector[Double],
         averageDualVariable_u_avg: DenseVector[Double],
@@ -53,13 +46,13 @@ trait ADMMUpdater extends Serializable {
         numPartitions: Long
     ): DenseVector[Double]
 
-    /** Updates the scaled dual variable `u` on a single partition (Equation 5). */
+    // update dual variable u on partition
     def uUpdate(
         currentState: ADMMState,
         globalConsensusVariable_z: DenseVector[Double]
     ): ADMMState
 
-    /** Determines if the algorithm has converged by checking residuals against tolerances (Equation 7). */
+    // check convergence based on residuals
     def checkConvergence(
         primalResidual: Double,
         dualResidual: Double,
@@ -69,7 +62,7 @@ trait ADMMUpdater extends Serializable {
         numFeatures: Int
     ): Boolean
 
-    /** Implements the adaptive rho update scheme to improve convergence speed (Equation 8). */
+    // adaptive rho update scheme
     def updateRho(
         currentRho: Double,
         primalResidual: Double,
@@ -79,12 +72,9 @@ trait ADMMUpdater extends Serializable {
 
 
 /**
+ *
+ * 2. L2-REGULARIZED LOGISTIC REGRESSION
  * ============================================================================================
- * 2. CONCRETE IMPLEMENTATION FOR L2-REGULARIZED LOGISTIC REGRESSION
- * ============================================================================================
- */
-
-/**
  * Implements the ADMMUpdater trait for L2-Regularized Logistic Regression (SquaredL2Updater in the diagram).
  * This class contains the specific mathematical formulas for the problem.
  *
@@ -92,57 +82,52 @@ trait ADMMUpdater extends Serializable {
  */
 class SquaredL2Updater(val regularizationParam_lambda: Double) extends ADMMUpdater {
 
-    /**
-     * ULTRA MEMORY-OPTIMIZED w-update that processes data streaming without creating intermediate vectors.
-     * This avoids OutOfMemoryError by never loading entire partitions and reusing gradient accumulators.
-     */
-    override def wUpdate(
+        override def wUpdate(
         partitionData: Iterator[(Double, DenseVector[Double])],
         currentState: ADMMState,
         globalConsensusVariable_z: DenseVector[Double],
         penaltyParameter_rho: Double
     ): ADMMState = {
 
-        // Convert iterator to array to enable multiple passes (needed for L-BFGS)
-        // Process in ultra-small chunks to minimize memory
+        // convert iterator to array for multiple passes
         val dataBuffer = scala.collection.mutable.ArrayBuffer[(Double, DenseVector[Double])]()
-        val maxSamples = 20000  // Ultra-conservative limit per partition
+        val maxSamples = 20000  // limited to make runnable with our resources
         var count = 0
         
         while (partitionData.hasNext && count < maxSamples) {
             dataBuffer += partitionData.next()
             count += 1
             
-            // Force GC every 1000 samples
+            // force GC every 1000 samples
             if (count % 1000 == 0) {
                 System.gc()
             }
         }
         
         if (dataBuffer.isEmpty) return currentState
-        println(s"Ultra-memory processing ${dataBuffer.size} samples in partition")
+        println(s"processing ${dataBuffer.size} samples in partition")
 
         val costFunction = new DiffFunction[DenseVector[Double]] {
             def calculate(w: DenseVector[Double]): (Double, DenseVector[Double]) = {
                 var totalLoss = 0.0
-                val gradient = DenseVector.zeros[Double](w.length)  // Reuse this accumulator
-                val miniSize = 100  // Ultra-small batches
+                val gradient = DenseVector.zeros[Double](w.length)
+                val miniSize = 100
                 
-                // Process in tiny streaming batches
+                // process in batches
                 for (start <- dataBuffer.indices by miniSize) {
                     val end = math.min(start + miniSize, dataBuffer.size)
                     var batchLoss = 0.0
                     
-                    // Accumulate gradient in-place to avoid creating intermediate vectors
+                    // accumulate gradient in-place to which should avoid creating intermediate vectors
                     for (i <- start until end) {
                         val (label, features) = dataBuffer(i)
                         val prediction = features.t * w
                         val expTerm = math.exp(-label * prediction)
                         
-                        // Logistic loss
+                        // logistic loss
                         batchLoss += math.log(1 + expTerm)
                         
-                        // Gradient: accumulate directly into gradient vector
+                        // accumulate directly into gradient vector
                         val gradientCoeff = -label / (1 + math.exp(label * prediction))
                         var j = 0
                         while (j < features.length) {
@@ -153,38 +138,33 @@ class SquaredL2Updater(val regularizationParam_lambda: Double) extends ADMMUpdat
                     
                     totalLoss += batchLoss
                     
-                    // Force GC every few mini-batches
+                    // force GC every few mini-batches
                     if (start % (miniSize * 5) == 0) {
                         System.gc()
                     }
                 }
                 
-                // Normalize by number of samples
+                // normalize by number of samples
                 totalLoss = totalLoss / dataBuffer.size
-                gradient :/= dataBuffer.size.toDouble  // In-place division
+                gradient :/= dataBuffer.size.toDouble
 
-                // Augmented Lagrangian term
+                // augmented Lagrangian term
                 val lagrangianResidual = w - globalConsensusVariable_z + currentState.scaledDualVariable_u
                 val augmentedLagrangian = (penaltyParameter_rho / 2.0) * (lagrangianResidual.t * lagrangianResidual)
                 val lagrangianGradient = lagrangianResidual * penaltyParameter_rho
 
-                // Combine objective and gradient
+                // combining objective and gradient
                 (totalLoss + augmentedLagrangian, gradient + lagrangianGradient)
             }
         }
 
-        // Use more conservative L-BFGS settings
         val lbfgs = new LBFGS[DenseVector[Double]](maxIter = 50, m = 5, tolerance = 1e-4)
         val new_w = lbfgs.minimize(costFunction, currentState.localWeightVector_w)
 
         currentState.copy(localWeightVector_w = new_w)
     }
 
-    /**
-     * Performs the z-update on the driver.
-     * This solves Equation (4) from the paper:
-     *   z^(k+1) = (N*ρ / (N*ρ + 2*λ)) * (w_avg^(k+1) + u_avg^k)
-     */
+    // z-update on driver: z = (N*ρ / (N*ρ + 2*λ)) * (w_avg + u_avg)
     override def zUpdate(
         averageLocalWeights_w_avg: DenseVector[Double],
         averageDualVariable_u_avg: DenseVector[Double],
@@ -199,11 +179,7 @@ class SquaredL2Updater(val regularizationParam_lambda: Double) extends ADMMUpdat
         (averageLocalWeights_w_avg + averageDualVariable_u_avg) * shrinkageFactor
     }
 
-    /**
-     * Performs the u-update on each partition.
-     * This performs Equation (5) from the paper:
-     *   u^(k+1) = u^k + w^(k+1) - z^(k+1)
-     */
+    // u-update: u = u + w - z
     override def uUpdate(
         currentState: ADMMState,
         globalConsensusVariable_z: DenseVector[Double]
@@ -212,49 +188,37 @@ class SquaredL2Updater(val regularizationParam_lambda: Double) extends ADMMUpdat
         currentState.copy(scaledDualVariable_u = new_u)
     }
 
-    /**
-     * Checks for convergence based on primal and dual residuals.
-     * Implements the stopping criterion from Equation (7) in the paper:
-     *   ||r^k|| <= 𝜖𝑝𝑟𝑖 = sqrt(N*p)*𝜖_abs + 𝜖_rel * max{ ||w||, ||z|| }
-     * where ||w|| is sqrt(Σ ||w_i||²).
-     * The dual residual stopping condition is analogous.
-     */
+    // convergence check based on primal residual
     override def checkConvergence(
         primalResidual: Double,
         dualResidual: Double,
-        normOfAllLocalWeights: Double, // This is sqrt(Σ ||w_i||²)
+        normOfAllLocalWeights: Double,
         normOfGlobalZ: Double,
         numPartitions: Long,
         numFeatures: Int
     ): Boolean = {
-        // Use Su's paper tolerances (Section 3.1): ε_abs = ε_rel = 10^-3
         val epsilon_absolute = 1e-3
         val epsilon_relative = 1e-3
-
         val N = numPartitions.toDouble
         
-        // Su's paper Equation (7): ε_pri = √N·ε_abs + ε_rel·max{√∑‖w_i‖₂², ‖z‖₂}
+        // primal tolerance from paper
         val primalTolerance = math.sqrt(N) * epsilon_absolute + epsilon_relative * math.max(normOfAllLocalWeights, normOfGlobalZ)
 
         println(f"Primal Residual: $primalResidual%.6f, Primal Tolerance: $primalTolerance%.6f")
         println(f"Dual Residual:   $dualResidual%.6f (for monitoring only)")
 
-        // Su's paper only checks primal residual (Equation 7)
         primalResidual <= primalTolerance
     }
 
-    /**
-     * Automatically updates the penalty parameter `ρ` based on the ratio of primal and dual residuals.
-     * Implements Equation (8) from paper section 3.4.
-     */
+    // adaptive rho update
     override def updateRho(
         currentRho: Double,
         primalResidual: Double,
         dualResidual: Double
     ): Double = {
-        val mu = 10.0      // Balance parameter (recommended value)
-        val tau_incr = 2.0 // Increment factor (recommended value)
-        val tau_decr = 2.0 // Decrement factor (recommended value)
+        val mu = 10.0
+        val tau_incr = 2.0
+        val tau_decr = 2.0
 
         if (primalResidual > mu * dualResidual) {
             currentRho * tau_incr
@@ -266,28 +230,19 @@ class SquaredL2Updater(val regularizationParam_lambda: Double) extends ADMMUpdat
     }
 }
 
-/**
- * ============================================================================================
- * 3. ORCHESTRATION AND EXECUTION LOGIC
- * ============================================================================================
- */
 
 /**
- * Orchestrates the distributed ADMM optimization process, as described in the paper.
- * This class corresponds to the `ADMMOptimizer` in the UML diagram. It manages the main
- * iteration loop, data persistence, and communication (broadcasts and aggregations).
- *
- * @param updater An instance of ADMMUpdater containing the problem-specific math.
- * @param numPartitions The number of partitions `N` to split the data into.
- * @param numFeatures The number of features `p` in the dataset.
+ * 3. EXECUTION LOGIC
+ * ================================================
  */
+
+// main ADMM optimizer that coordinates the distributed process
 class ADMMOptimizer(
-
     val updater: ADMMUpdater,
     val numPartitions: Int,
     val numFeatures: Int) extends Serializable {
 
-    def run(data: RDD[(Double, DenseVector[Double])], maxIterations: Int): DenseVector[Double] = {
+    def run(data: RDD[(Double, DenseVector[Double])], maxIterations: Int): (DenseVector[Double], Int) = {
         val sparkContext = data.sparkContext
 
         val partitionedData = data.repartition(numPartitions).persist(StorageLevel.DISK_ONLY)
@@ -390,7 +345,7 @@ class ADMMOptimizer(
         statesRDD.unpersist()
 
         println(s"\nConvergence reached after $iteration iterations.")
-        globalConsensusVariable_z // The final model
+        (globalConsensusVariable_z, iteration) // The final model and iteration count
     }
 }
 
@@ -407,7 +362,7 @@ class LogisticRegressionWithADMM(
     val maxIterations: Int
 ) extends GeneralizedLinearAlgorithm {
 
-    def train(data: RDD[(Double, DenseVector[Double])]): DenseVector[Double] = {
+    def train(data: RDD[(Double, DenseVector[Double])]): (DenseVector[Double], Int) = {
         require(data.getStorageLevel != StorageLevel.NONE, "Input RDD must be persisted.")
         val numFeatures = data.first()._2.length
         
@@ -423,7 +378,6 @@ class LogisticRegressionWithADMM(
 
 
 /**
- * ============================================================================================
  * 4. RUNNER OBJECT
  * ============================================================================================
  */
@@ -463,206 +417,64 @@ object ADMMRunner {
         )
 
         // Train the model
-        val finalModelWeights = admmLogisticRegression.train(data)
-
-        println(s"\nFinal model weights (first 20):\n${finalModelWeights.toArray.take(20).mkString(",")}")
-
-        // Save the final model weights to a file
-        val writer = new PrintWriter(outputPath)
-        try {
-            writer.println(finalModelWeights.toArray.mkString(","))
-        } finally {
-            writer.close()
+        val (trainedModel, iterations) = admmLogisticRegression.train(data)
+        
+        // Save the model
+        new PrintWriter(outputPath) {
+            write(trainedModel.toArray.mkString(","))
+            close()
         }
-
-        println(s"Model saved to $outputPath")
+        
+        println(s"Training completed in $iterations iterations")
+        println(s"Model saved to: $outputPath")
+        
         spark.stop()
     }
 }
 
 /**
- * ============================================================================================
- * 5. CONVENIENCE FUNCTIONS FOR SPARK SHELL
+ * 5. CONVENIENCE FUNCTIONS FOR SPARK SHELL (SPARK 2.4 COMPATIBLE)
  * ============================================================================================
  */
 
-/**
- * Lists all available datasets in the sourced folder.
- */
-def listDatasets(): Unit = {
-  val sourcedPath = "/workspace/data/sourced"
-  println(s"Available datasets in $sourcedPath:")
-  println("=" * 50)
-  
-  try {
-    val files = new java.io.File(sourcedPath).listFiles()
-      .filter(_.isFile)
-      .filter(f => f.getName.endsWith(".dat") || f.getName.endsWith(".csv"))
-      .sortBy(_.getName)
+// custom data loading that handles both 0-based and 1-based feature indices
+def loadLibSVMFileCustom(sc: SparkContext, path: String): RDD[org.apache.spark.mllib.regression.LabeledPoint] = {
+  sc.textFile(path).map { line =>
+    val parts = line.trim.split(" ")
+    val label = parts(0).toDouble
     
-    files.foreach { file =>
-      val sizeInMB = file.length() / (1024 * 1024)
-      println(f"  ${file.getName}%-35s (${sizeInMB}%3d MB)")
+    // parse features, handling both 0-based and 1-based indices
+    val features = parts.tail.map { feature =>
+      val Array(indexStr, valueStr) = feature.split(":")
+      val index = indexStr.toInt
+      val value = valueStr.toDouble
+      // convert 0-based to 1-based if needed
+      (if (index == 0) 1 else if (index < 0) index + 1 else index, value)
+    }.sortBy(_._1)
+    
+    // find max feature index to determine vector size
+    val maxIndex = if (features.isEmpty) 1 else features.map(_._1).max
+    val featureArray = Array.fill(maxIndex)(0.0)
+    
+    features.foreach { case (index, value) =>
+      featureArray(index - 1) = value  // convert back to 0-based for array
     }
-    println()
-    println("Usage: runADMM(\"filename.dat\") - will automatically look in sourced folder")
-  } catch {
-    case e: Exception => println(s"Error listing files: ${e.getMessage}")
-  }
-}
-
-/**
- * Enhanced function to run ADMM on any dataset by filename.
- * Automatically looks in /workspace/data/sourced/ folder.
- */
-def runADMM(filename: String, 
-           numPartitions: Int = 10, 
-           lambda: Double = 0.1, 
-           maxIterations: Int = 50,
-           outputPath: String = ""): DenseVector[Double] = {
-  
-  // Automatically prepend the sourced folder path if just filename is given
-  val dataPath = if (filename.startsWith("/")) {
-    filename // Full path provided
-  } else {
-    s"/workspace/data/sourced/$filename" // Just filename, add sourced path
-  }
-  
-  println(s"Loading data from: $dataPath")
-  val data = MLUtils.loadLibSVMFile(sc, dataPath).map {
-    lp => (lp.label, DenseVector(lp.features.toArray))
-  }.persist(StorageLevel.DISK_ONLY)
-  
-  // Automatically determine number of features from the data
-  val n_features = data.map(_._2.length).max()
-  println(s"Detected $n_features features in the dataset")
-  
-  // Count samples
-  val numSamples = data.count()
-  println(s"Dataset contains $numSamples samples")
-  
-  println(s"Running ADMM with:")
-  println(s"  - Partitions: $numPartitions")  
-  println(s"  - Lambda (regularization): $lambda")
-  println(s"  - Max iterations: $maxIterations")
-  println(s"  - Features: $n_features")
-  
-  // Use the proper LogisticRegressionWithADMM class
-  val admmLogisticRegression = new LogisticRegressionWithADMM(
-    regularizationParam_lambda = lambda,
-    numPartitions = numPartitions,
-    maxIterations = maxIterations
-  )
-  
-  val startTime = System.currentTimeMillis()
-  val final_model = admmLogisticRegression.train(data)
-  val endTime = System.currentTimeMillis()
-  
-  val runTime = (endTime - startTime) / 1000.0
-  println(s"\nADMM completed in $runTime seconds")
-  println(s"Final model weights (first 10): ${final_model.toArray.take(10).mkString(", ")}")
-  
-  // Auto-generate output path if not provided
-  val finalOutputPath = if (outputPath.isEmpty) {
-    val baseFileName = filename.split("/").last.split("\\.").head
-    s"/workspace/data/generated/${baseFileName}_admm_model.txt"
-  } else {
-    outputPath
-  }
-  
-  // Save results
-  val writer = new PrintWriter(finalOutputPath)
-  writer.println(final_model.toArray.mkString(","))
-  writer.close()
-  println(s"Model saved to: $finalOutputPath")
-  
-  data.unpersist()
-  final_model
-}
-
-/**
- * Interactive function that shows available datasets and prompts for selection.
- */
-def runADMM_Interactive(): DenseVector[Double] = {
-  listDatasets()
-  print("Enter filename to run ADMM on: ")
-  val filename = scala.io.StdIn.readLine()
-  
-  if (filename.trim.isEmpty) {
-    println("No filename entered. Using sample_rcv1.dat as default.")
-    runADMM("sample_rcv1.dat")
-  } else {
-    runADMM(filename.trim)
-  }
-}
-
-/**
- * Quick test function with very few iterations for debugging.
- */
-def testADMM(filename: String): DenseVector[Double] = {
-  println(s"Running ADMM test on $filename (5 iterations only)...")
-  runADMM(filename, numPartitions = 2, lambda = 0.1, maxIterations = 5)
-}
-
-/**
- * Function to run ADMM on the full RCV1 training dataset with optimized parameters.
- */
-def runADMM_RCV1_Full(numPartitions: Int = 8): DenseVector[Double] = {
-  println("Running ADMM on full RCV1 training dataset...")
-  println("Note: This will take significantly longer than the sample dataset!")
-  runADMM("lyrl2004_tokens_train.dat", numPartitions, lambda = 0.1, maxIterations = 50)
-}
-
-/**
- * Function to compare ADMM performance on different RCV1 dataset splits.
- */
-def compareRCV1_Datasets(): Unit = {
-  val rcv1Files = Array(
-    "sample_rcv1.dat",
-    "lyrl2004_tokens_train.dat",
-    "lyrl2004_tokens_test_pt0.dat"
-  )
-  
-  println("Comparing ADMM performance on different RCV1 datasets:")
-  
-  for (file <- rcv1Files) {
-    println(s"\n=== Testing $file ===")
-    try {
-      val model = testADMM(file) // Use test version with fewer iterations
-      println(s"Completed $file - Model norm: ${norm(model, 2)}")
-    } catch {
-      case e: Exception => println(s"Error with $file: ${e.getMessage}")
-    }
-  }
-}
-
-/**
- * Helper function to get dataset info without running ADMM.
- */
-def datasetInfo(filename: String): Unit = {
-  val dataPath = if (filename.startsWith("/")) filename else s"/workspace/data/sourced/$filename"
-  
-  try {
-    println(s"Loading dataset info from: $dataPath")
-    val data = MLUtils.loadLibSVMFile(sc, dataPath)
     
-    val numSamples = data.count()
-    val numFeatures = data.map(_.features.size).max()
-    val labels = data.map(_.label).distinct().collect().sorted
-    
-    println(s"Dataset: $filename")
-    println(s"  Samples: $numSamples")
-    println(s"  Features: $numFeatures") 
-    println(s"  Labels: ${labels.mkString(", ")}")
-    
-    data.unpersist()
-  } catch {
-    case e: Exception => println(s"Error reading $filename: ${e.getMessage}")
+    new org.apache.spark.mllib.regression.LabeledPoint(label, org.apache.spark.mllib.linalg.Vectors.dense(featureArray))
+  }
+}
+
+// smart data loading that uses custom parser for HIGGS and standard for others
+def loadDataSmart(sc: SparkContext, path: String, isHiggs: Boolean): RDD[org.apache.spark.mllib.regression.LabeledPoint] = {
+  if (isHiggs) {
+    println("Using custom parser for HIGGS dataset (0-based indices)")
+    loadLibSVMFileCustom(sc, path)
+  } else {
+    MLUtils.loadLibSVMFile(sc, path)
   }
 }
 
 /**
- * ============================================================================================
  * 6. ACCURACY EVALUATION FUNCTIONS (KEY FOR PAPER REPRODUCTION)
  * ============================================================================================
  */
@@ -687,188 +499,317 @@ def calculateAccuracy(testData: RDD[(Double, DenseVector[Double])], model: Dense
   correct.toDouble / total.toDouble
 }
 
-/**
- * Split dataset into training and testing sets.
- * Uses the same 80/20 split methodology as the paper.
- */
+
 def splitTrainTest(data: RDD[(Double, DenseVector[Double])], trainRatio: Double = 0.8): (RDD[(Double, DenseVector[Double])], RDD[(Double, DenseVector[Double])]) = {
   val Array(trainData, testData) = data.randomSplit(Array(trainRatio, 1.0 - trainRatio), seed = 42)
   (trainData.persist(StorageLevel.MEMORY_AND_DISK), testData.persist(StorageLevel.MEMORY_AND_DISK))
 }
 
-/**
- * ====================== MEMORY-SAFE ADMM WITH ACCURACY (FIXED) =====================
- */
 
-def runADMM_WithAccuracy(
-    filename: String = "rcv1_5percent_sample.dat",  // Now uses proper RCV1 sample with real labels
-    sampleRatio: Double = 1.0,     // Use full sample (it's already sampled)
-    numPartitions: Int = 8,        // Su used 5-15 partitions  
-    lambda: Double = 0.01,         // Smaller lambda like Su likely used
-    maxIterations: Int = 50,
-    trainRatio: Double = 0.8): Unit = {
 
-  val dataPath = if (filename.startsWith("/")) filename else s"/workspace/data/sourced/$filename"
-  println(s"Loading LibSVM data from: $dataPath")
-  println("Using Su's paper methodology with proper RCV1 sample (5% subset with real -1/+1 labels)")
+def runADMM(
+    dataset: String = "rcv1",
+    trainFilename: String = "",
+    testFilename: String = "",
+    numPartitions: Int = 8,
+    lambda: Double = 0.01,
+    maxIterations: Int = 50): DenseVector[Double] = {
 
-  // Load the pre-sampled data (it's already a 5% sample with proper labels)
-  val rawData = MLUtils.loadLibSVMFile(sc, dataPath)
-  val sampledData = if (sampleRatio < 1.0) {
-    rawData.sample(false, sampleRatio, 42)
-      .map(lp => (lp.label, DenseVector(lp.features.toArray)))
-      .persist(StorageLevel.DISK_ONLY)
-  } else {
-    rawData.map(lp => (lp.label, DenseVector(lp.features.toArray)))
-      .persist(StorageLevel.DISK_ONLY)
+  val (defaultTrain, defaultTest) = dataset.toLowerCase match {
+    case "higgs" => ("higgs_train15k.binary", "higgs_test10k.binary")
+    case "rcv1" | _ => ("rcv1_train15k.binary", "rcv1_test10k.binary")
   }
+  
+  val finalTrainFile = if (trainFilename.nonEmpty) trainFilename else defaultTrain
+  val finalTestFile = if (testFilename.nonEmpty) testFilename else defaultTest
 
-  val nSamples = sampledData.count()
-  val nFeatures = sampledData.first()._2.length
-  println(s"Dataset: $nSamples samples, $nFeatures features (RCV1 5% sample with proper labels)")
+  val trainPath = if (finalTrainFile.startsWith("/")) finalTrainFile else s"/workspace/data/sourced/$finalTrainFile"
+  val testPath = if (finalTestFile.startsWith("/")) finalTestFile else s"/workspace/data/sourced/$finalTestFile"
+  
+  val output = new StringBuilder()
+  
+  output.append(s"Dataset: ${dataset.toUpperCase()}\n")
+  output.append(s"Loading training data from: $trainPath\n")
+  output.append(s"Loading test data from: $testPath\n")
+  output.append("Using optimized samples with automatic rho updating (μ=10, τ^incr=2, τ^decr=2)\n")
+  
+  println(s"Dataset: ${dataset.toUpperCase()}")
+  println(s"Loading training data from: $trainPath")
+  println(s"Loading test data from: $testPath")
+  println("Using optimized samples with automatic rho updating (μ=10, τ^incr=2, τ^decr=2)")
 
-  // Use Su's partitioning approach (8 partitions like his experiments)
-  val data = sampledData.repartition(numPartitions).persist(StorageLevel.DISK_ONLY)
+  System.setProperty("spark.ui.showConsoleProgress", "false")
+  org.apache.log4j.Logger.getLogger("org.apache.spark.scheduler.DAGScheduler").setLevel(org.apache.log4j.Level.ERROR)
 
-  // Split train/test
-  val Array(train, test) = data.randomSplit(Array(trainRatio, 1.0 - trainRatio), seed = 42)
-  train.persist(StorageLevel.DISK_ONLY)
-  test.persist(StorageLevel.DISK_ONLY)
+  val trainData = loadDataSmart(sc, trainPath, dataset.toLowerCase == "higgs")
+    .map { lp => (lp.label, DenseVector(lp.features.toArray)) }
+    .repartition(numPartitions)
+    .persist(StorageLevel.DISK_ONLY)
 
-  val trainCount = train.count()
-  val testCount = test.count()
-  println(s"Train: $trainCount samples, Test: $testCount samples")
+  val testData = loadDataSmart(sc, testPath, dataset.toLowerCase == "higgs")
+    .map { lp => (lp.label, DenseVector(lp.features.toArray)) }
+    .persist(StorageLevel.DISK_ONLY)
 
-  // Check label distribution
-  val labelCounts = train.map(_._1).countByValue()
-  println(s"Training label distribution: ${labelCounts}")
+  val nTrainSamples = trainData.count()
+  val nTestSamples = testData.count()
+  val nFeatures = trainData.first()._2.length
+  
+  output.append(s"Training: $nTrainSamples samples, Testing: $nTestSamples samples, Features: $nFeatures\n")
+  println(s"Training: $nTrainSamples samples, Testing: $nTestSamples samples, Features: $nFeatures")
 
-  // Train ADMM using Su's optimized parameters
+  val labelCounts = trainData.map(_._1).countByValue()
+  output.append(s"Training label distribution: $labelCounts\n\n")
+  println(s"Training label distribution: $labelCounts")
+
   val learner = new LogisticRegressionWithADMM(lambda, numPartitions, maxIterations)
   
-  println("\n" + "="*60)
-  println("STARTING ADMM TRAINING (Su's Paper Methodology with Real Labels)")
-  println("="*60)
+  output.append("="*60 + "\n")
+  output.append("STARTING ADMM TRAINING\n")
+  output.append("="*60 + "\n")
   
+  println("\n" + "="*60)
+  println("STARTING ADMM TRAINING")
+  println("="*60)
+
   val t0 = System.currentTimeMillis()
-  val model = learner.train(train)
+  val (model, iterations) = learner.train(trainData)
   val t1 = System.currentTimeMillis()
   val runtimeSec = (t1 - t0) / 1000.0
 
-  // Evaluate accuracy
-  val accuracy = calculateAccuracy(test, model) * 100.0
+ 
+  val accuracy = calculateAccuracy(testData, model) * 100.0
 
-  // Debug: Check if model is learning properly
   val modelNorm = norm(model, 2)
   val nonZeroWeights = model.toArray.count(math.abs(_) > 1e-6)
-  println(s"\nModel Analysis:")
-  println(s"Model L2 norm: $modelNorm")
-  println(s"Non-zero weights: $nonZeroWeights / ${model.length}")
   
-  // Debug: Check a few predictions manually
-  val samplePredictions = test.take(5).map { case (actualLabel, features) =>
+
+  val samplePredictions = testData.take(5).map { case (actualLabel, features) =>
     val rawPrediction = features.t * model
     val probability = 1.0 / (1.0 + math.exp(-rawPrediction))
     val predictedLabel = if (probability > 0.5) 1.0 else -1.0
     (actualLabel, rawPrediction, probability, predictedLabel)
   }
-  println(s"\nSample Predictions:")
-  samplePredictions.foreach { case (actual, raw, prob, pred) =>
-    println(f"Actual: $actual, Raw: $raw%.6f, Prob: $prob%.6f, Predicted: $pred")
-  }
+
+  output.append("\n" + "="*60 + "\n")
+  output.append("ADMM RESULTS\n")
+  output.append("="*60 + "\n")
+  output.append(s"Training Dataset: $finalTrainFile ($nTrainSamples samples)\n")
+  output.append(s"Test Dataset: $finalTestFile ($nTestSamples samples)\n")
+  output.append(s"Features: $nFeatures\n")
+  output.append(s"Runtime: ${f"$runtimeSec%.1f"} seconds\n")
+  output.append(s"Accuracy: ${f"$accuracy%.2f"}%\n")
+  output.append(s"Iterations: $iterations\n")
+  output.append(s"Parameters: λ=$lambda, Partitions=$numPartitions\n")
+  output.append(s"Model L2 norm: ${f"$modelNorm%.6f"}, Non-zero weights: $nonZeroWeights/${model.length}\n")
+  output.append("="*60 + "\n\n")
+  output.append("MODEL WEIGHTS:\n")
+  output.append(model.toArray.mkString(",") + "\n")
 
   println("\n" + "="*60)
-  println("ADMM RESULTS WITH PROPER RCV1 DATA")
+  println("ADMM RESULTS")
   println("="*60)
-  println(f"Dataset: $filename (RCV1 5%% sample with real labels)")
-  println(f"Samples: $nSamples (Train: $trainCount, Test: $testCount)")
-  println(f"Features: $nFeatures")
-  println(f"Runtime: $runtimeSec%.1f seconds")
-  println(s"Accuracy: ${accuracy.formatted("%.2f")}% (Target: 98.17% from Su's paper)")
-  println(s"Parameters: λ=$lambda, MaxIters=$maxIterations, Partitions=$numPartitions")
+  println(s"Training Dataset: $finalTrainFile ($nTrainSamples samples)")
+  println(s"Test Dataset: $finalTestFile ($nTestSamples samples)")
+  println(s"Features: $nFeatures")
+  println(s"Runtime: ${f"$runtimeSec%.1f"} seconds")
+  println(s"Accuracy: ${f"$accuracy%.2f"}%")
+  println(s"Iterations: $iterations")
+  println(s"Parameters: λ=$lambda, Partitions=$numPartitions")
+  println(s"Model L2 norm: ${f"$modelNorm%.6f"}, Non-zero weights: $nonZeroWeights/${model.length}")
   println("="*60)
 
-  // Save model
-  val base = filename.split("/").last.split("\\.").head
-  val out = s"/workspace/data/generated/${base}_admm_model.txt"
-  new PrintWriter(out) { write(model.toArray.mkString(",")); close() }
-  println(s"Model saved to: $out")
 
-  // Clean up
-  rawData.unpersist()
-  sampledData.unpersist()
-  data.unpersist()
-  train.unpersist()
-  test.unpersist()
+  val sparkVersion = "2_4"  
+  
+
+  val trainSamples = finalTrainFile.split("/").last.replaceAll(".*train([0-9]+k?).*", "$1")
+  val testSamples = finalTestFile.split("/").last.replaceAll(".*test([0-9]+k?).*", "$1")
+  
+
+  def getNextRunNumber(basePattern: String): Int = {
+    val outputDir = new java.io.File("/workspace/data/generated")
+    if (!outputDir.exists()) outputDir.mkdirs()
+    
+    val existingFiles = outputDir.listFiles()
+      .filter(_.getName.matches(s"${basePattern}_\\d+_${numPartitions}part_output\\.txt"))
+      .map(_.getName.replaceAll(s"${basePattern}_(\\d+)_${numPartitions}part_output\\.txt", "$1").toInt)
+    
+    if (existingFiles.isEmpty) 1 else existingFiles.max + 1
+  }
+  
+  val basePattern = s"${sparkVersion}_${trainSamples}_${testSamples}_admm"
+  val runNumber = getNextRunNumber(basePattern)
+  val out = s"/workspace/data/generated/${basePattern}_${runNumber}_${numPartitions}part_output.txt"
+  
+  new PrintWriter(out) { write(output.toString()); close() }
+  println(s"Complete output saved to: $out")
+
+  trainData.unpersist()
+  testData.unpersist()
+
+  model
 }
 
-/**
- * ====================== SCALED-DOWN EXPERIMENT FOR MEMORY-CONSTRAINED SYSTEMS =====================
- */
+def runLBFGS(
+    dataset: String = "rcv1",
+    trainFilename: String = "",
+    testFilename: String = "",  
+    numPartitions: Int = 8,
+    regParam: Double = 0.01,
+    maxIterations: Int = 100): org.apache.spark.mllib.linalg.Vector = {
 
-/**
- * Runs ADMM on a scaled-down subset of the RCV1 dataset for systems with memory constraints.
- * This function automatically samples ~1000 examples from the full dataset and runs the complete
- * ADMM experiment with accuracy evaluation, designed to replace runADMM_WithAccuracy for
- * resource-limited environments while maintaining experimental validity.
- */
-def runADMM_ScaledDown(filename: String = "lyrl2004_vectors_test_pt0.dat"): Unit = {
-  println("\n" + "="*60)
-  println("ADMM SCALED-DOWN EXPERIMENT")
-  println("="*60)
-  println(s"Sampling ~1000 examples from $filename for memory-safe execution...")
+  val (defaultTrain, defaultTest) = dataset.toLowerCase match {
+    case "higgs" => ("higgs_train15k.binary", "higgs_test10k.binary")
+    case "rcv1" | _ => ("rcv1_train15k.binary", "rcv1_test10k.binary")
+  }
   
-  val dataPath = if (filename.startsWith("/")) filename else s"/workspace/data/sourced/$filename"
+  val finalTrainFile = if (trainFilename.nonEmpty) trainFilename else defaultTrain
+  val finalTestFile = if (testFilename.nonEmpty) testFilename else defaultTest
+
+  val trainPath = if (finalTrainFile.startsWith("/")) finalTrainFile else s"/workspace/data/sourced/$finalTrainFile"
+  val testPath = if (finalTestFile.startsWith("/")) finalTestFile else s"/workspace/data/sourced/$finalTestFile"
   
-  // Load and sample the data (0.5% = ~1000 samples from 199K)
-  val fullData = MLUtils.loadLibSVMFile(sc, dataPath)
-  val sampledData = fullData.sample(false, 0.005, 42)
-    .map(lp => (lp.label, DenseVector(lp.features.toArray)))
+  val output = new StringBuilder()
+  
+  output.append(s"Dataset: ${dataset.toUpperCase()}\n")
+  output.append(s"Loading training data from: $trainPath\n")
+  output.append(s"Loading test data from: $testPath\n")
+  output.append("Using MLlib LogisticRegressionWithLBFGS for baseline comparison\n")
+  
+  println(s"Dataset: ${dataset.toUpperCase()}")
+  println(s"Loading training data from: $trainPath")
+  println(s"Loading test data from: $testPath")
+  println("Using MLlib LogisticRegressionWithLBFGS for baseline comparison")
+
+  System.setProperty("spark.ui.showConsoleProgress", "false")
+  org.apache.log4j.Logger.getLogger("org.apache.spark.scheduler.DAGScheduler").setLevel(org.apache.log4j.Level.ERROR)
+
+
+  val trainData = loadDataSmart(sc, trainPath, dataset.toLowerCase == "higgs")
+    .map(lp => lp.copy(label = if (lp.label == -1.0) 0.0 else 1.0))
+    .repartition(numPartitions)
     .persist(StorageLevel.DISK_ONLY)
+
+  val testData = loadDataSmart(sc, testPath, dataset.toLowerCase == "higgs")
+    .map(lp => lp.copy(label = if (lp.label == -1.0) 0.0 else 1.0))
+    .persist(StorageLevel.DISK_ONLY)
+
+  val nTrainSamples = trainData.count()
+  val nTestSamples = testData.count()
+  val nFeatures = trainData.first().features.size
   
-  val nSamples = sampledData.count()
-  val nFeatures = sampledData.first()._2.length
-  println(s"Sampled Dataset: $nSamples samples, $nFeatures features")
+  output.append(s"Training: $nTrainSamples samples, Testing: $nTestSamples samples, Features: $nFeatures\n")
+  println(s"Training: $nTrainSamples samples, Testing: $nTestSamples samples, Features: $nFeatures")
+
+
+  val labelCounts = trainData.map(_.label).countByValue()
+  output.append(s"Training label distribution: ${labelCounts}\n\n")
+  println(s"Training label distribution: ${labelCounts}")
+
+
+  val lbfgs = new org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS()
+    .setNumClasses(2)
+    .setIntercept(true)
   
-  // Split train/test (80/20)
-  val Array(train, test) = sampledData.randomSplit(Array(0.8, 0.2), seed = 42)
-  train.persist(StorageLevel.DISK_ONLY)
-  test.persist(StorageLevel.DISK_ONLY)
+
+  lbfgs.optimizer
+    .setRegParam(regParam)
+    .setNumIterations(maxIterations)
+    .setConvergenceTol(1e-6)
+
+  output.append("="*60 + "\n")
+  output.append("STARTING LBFGS TRAINING\n")
+  output.append("="*60 + "\n")
   
-  // Run ADMM with memory-safe configuration
-  val learner = new LogisticRegressionWithADMM(
-    regularizationParam_lambda = 0.1,
-    numPartitions = 2, // Small partitions for small data
-    maxIterations = 50
-  )
+  println("\n" + "="*60)
+  println("STARTING LBFGS TRAINING")
+  println("="*60)
   
   val t0 = System.currentTimeMillis()
-  val model = learner.train(train)
+  val model = lbfgs.run(trainData)
   val t1 = System.currentTimeMillis()
   val runtimeSec = (t1 - t0) / 1000.0
+
+  val predictions = testData.map { point =>
+    val prediction = model.predict(point.features)
+    (point.label, prediction)
+  }
   
-  // Calculate accuracy
-  val accuracy = calculateAccuracy(test, model) * 100.0
+  val accuracy = predictions.filter { case (actual, predicted) => actual == predicted }.count().toDouble / nTestSamples * 100.0
+
+
+  val modelWeights = model.weights.toArray
+  val modelNorm = math.sqrt(modelWeights.map(x => x * x).sum)
+  val nonZeroWeights = modelWeights.count(math.abs(_) > 1e-6)
   
+
+  val samplePredictions = testData.take(5).map { point =>
+    val predictedClass = model.predict(point.features)
+    (point.label, predictedClass)
+  }
+
+  output.append("\n" + "="*60 + "\n")
+  output.append("LBFGS RESULTS\n")
+  output.append("="*60 + "\n")
+  output.append(s"Training Dataset: $finalTrainFile ($nTrainSamples samples)\n")
+  output.append(s"Test Dataset: $finalTestFile ($nTestSamples samples)\n")
+  output.append(s"Features: $nFeatures\n")
+  output.append(s"Runtime: ${f"$runtimeSec%.1f"} seconds\n")
+  output.append(s"Accuracy: ${f"$accuracy%.2f"}%\n")
+  output.append(s"Iterations: $maxIterations (fixed)\n")
+  output.append(s"Parameters: regParam=$regParam, Partitions=$numPartitions\n")
+  output.append(s"Model L2 norm: ${f"$modelNorm%.6f"}, Non-zero weights: $nonZeroWeights/${modelWeights.length}\n")
+  output.append("="*60 + "\n\n")
+  output.append("MODEL WEIGHTS:\n")
+  output.append(modelWeights.mkString(",") + "\n")
+
   println("\n" + "="*60)
-  println("SCALED-DOWN ADMM RESULTS")
+  println("LBFGS RESULTS")
   println("="*60)
-  printf("Dataset Size: %d samples (%.1f%% of original)\n", nSamples, (nSamples / 199328.0) * 100)
-  printf("Runtime: %.1f seconds\n", runtimeSec)
-  printf("Accuracy: %.2f%%\n", accuracy)
-  println(s"Features: $nFeatures, Partitions: 2, Lambda: 0.1")
+  println(s"Training Dataset: $finalTrainFile ($nTrainSamples samples)")
+  println(s"Test Dataset: $finalTestFile ($nTestSamples samples)")
+  println(s"Features: $nFeatures")
+  println(s"Runtime: ${f"$runtimeSec%.1f"} seconds")
+  println(s"Accuracy: ${f"$accuracy%.2f"}%")
+  println(s"Iterations: $maxIterations (fixed)")
+  println(s"Parameters: regParam=$regParam, Partitions=$numPartitions")
+  println(s"Model L2 norm: ${f"$modelNorm%.6f"}, Non-zero weights: $nonZeroWeights/${modelWeights.length}")
   println("="*60)
+
+
+  val sparkVersion = "2_4"  
   
-  // Save model
-  val base = filename.split("/").last.split("\\.").head
-  val out = s"/workspace/data/generated/${base}_scaled_down_model.txt"
-  new PrintWriter(out) { write(model.toArray.mkString(",")); close() }
-  println(s"Model saved to: $out")
+
+  val trainSamples = finalTrainFile.split("/").last.replaceAll(".*train([0-9]+k?).*", "$1")
+  val testSamples = finalTestFile.split("/").last.replaceAll(".*test([0-9]+k?).*", "$1")
   
-  // Clean up
-  sampledData.unpersist()
-  train.unpersist()
-  test.unpersist()
+
+  def getNextRunNumber(basePattern: String): Int = {
+    val outputDir = new java.io.File("/workspace/data/generated")
+    if (!outputDir.exists()) outputDir.mkdirs()
+    
+    val existingFiles = outputDir.listFiles()
+      .filter(_.getName.matches(s"${basePattern}_\\d+_${numPartitions}part_output\\.txt"))
+      .map(_.getName.replaceAll(s"${basePattern}_(\\d+)_${numPartitions}part_output\\.txt", "$1").toInt)
+    
+    if (existingFiles.isEmpty) 1 else existingFiles.max + 1
+  }
+  
+  val basePattern = s"${sparkVersion}_${trainSamples}_${testSamples}_lbfgs"
+  val runNumber = getNextRunNumber(basePattern)
+  val out = s"/workspace/data/generated/${basePattern}_${runNumber}_${numPartitions}part_output.txt"
+  
+  new PrintWriter(out) { write(output.toString()); close() }
+  println(s"Complete output saved to: $out")
+
+
+  trainData.unpersist()
+  testData.unpersist()
+  
+
+  model.weights
 }
+
+
 
 

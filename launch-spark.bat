@@ -4,16 +4,26 @@ setlocal enabledelayedexpansion
 echo ========================================
 echo Spark Docker Launcher
 echo ========================================
+
+REM Simplified configuration - using conservative settings for all laptops/desktops
+
+:main_menu
+echo.
 echo Which Spark version?
 echo [1] Spark 4.0 (Scala shell)
 echo [2] Spark 2.4 (baseline)
+echo [3] Exit
 echo.
-set /p choice="Enter 1 or 2: "
+set /p choice="Enter 1, 2, or 3: "
 
 if "%choice%"=="" (
     echo ERROR: No choice entered!
-    pause
-    exit /b 1
+    goto main_menu
+)
+
+if "%choice%"=="3" (
+    echo Exiting...
+    exit /b 0
 )
 
 echo.
@@ -21,7 +31,6 @@ echo You selected: %choice%
 echo.
 
 REM Check if Docker is installed
-REM Test Docker and capture exit code only
 docker --version >nul 2>&1
 if errorlevel 1 goto install_docker
 
@@ -29,7 +38,7 @@ echo Docker CLI found
 goto docker_ready
 
 :install_docker
-echo ⚠ Docker not found or not accessible. Installing Docker Desktop automatically...
+echo Docker not found or not accessible. Installing Docker Desktop automatically...
 echo This will download and install Docker Desktop (~500MB)
 echo Press Ctrl+C to cancel if you want to install manually
 timeout /t 5
@@ -53,8 +62,6 @@ if errorlevel 1 (
 del "%installer_path%" >nul 2>&1
 echo Docker Desktop installed successfully!
 
-goto docker_ready
-
 :docker_ready
 echo.
 echo [STEP 2] Checking if Docker Desktop is running...
@@ -67,7 +74,6 @@ if "%docker_running%"=="0" (
 ) else (
     echo Docker Desktop is not running. Starting it now...
     
-    REM Try multiple common locations for Docker Desktop
     set "docker_exe="
     if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
         echo DEBUG: Found at C:\Program Files\Docker\Docker\Docker Desktop.exe
@@ -102,8 +108,6 @@ if "%docker_running%"=="0" (
         exit /b 1
     )
 )
-
-goto after_docker_wait
 
 :wait_for_docker
 setlocal enabledelayedexpansion
@@ -159,7 +163,7 @@ if "%choice%"=="1" (
     echo.
 
     echo ========================================
-    echo [STEP A] Starting all Spark 4.0 services...
+    echo Starting all Spark 4.0 services...
     echo ========================================
     docker compose -f "!COMPOSE_FILE!" up -d spark-master-40 spark-worker-40 spark40
     if errorlevel 1 (
@@ -209,7 +213,7 @@ if "%choice%"=="1" (
     timeout /t 5 /nobreak >nul
     
     echo ========================================
-    echo [STEP B] Connecting to the Spark 4.0 Scala shell...
+    echo Connecting to the Spark 4.0 Scala shell...
     echo ========================================
     
     REM Use docker exec for reliable connection
@@ -217,9 +221,14 @@ if "%choice%"=="1" (
     
     echo.
     echo ========================================
-    echo [STEP C] Shutting down all Spark 4.0 services...
+    echo Shutting down all Spark 4.0 services...
     echo ========================================
     docker compose -f "!COMPOSE_FILE!" down
+    
+    echo.
+    echo Spark 4.0 session ended. Returning to menu...
+    goto main_menu
+
 ) else if "%choice%"=="2" (
     echo Starting Spark 2.4...
     set "COMPOSE_FILE=docker\docker-compose.yml"
@@ -232,7 +241,7 @@ if "%choice%"=="1" (
     echo.
 
     echo ========================================
-    echo [STEP A] Starting all Spark services...
+    echo Starting all Spark services...
     echo ========================================
     docker compose -f "!COMPOSE_FILE!" up -d
     if errorlevel 1 (
@@ -282,7 +291,7 @@ if "%choice%"=="1" (
     timeout /t 5 /nobreak >nul
     
     echo ========================================
-    echo [STEP B] Connecting to the Spark 2.4 Scala shell...
+    echo Connecting to the Spark 2.4 Scala shell...
     echo ========================================
     
     REM Use docker exec for reliable connection
@@ -290,17 +299,16 @@ if "%choice%"=="1" (
     
     echo.
     echo ========================================
-    echo [STEP C] Shutting down all Spark services...
+    echo Shutting down all Spark services...
     echo ========================================
     docker compose -f "!COMPOSE_FILE!" down
+    
+    echo.
+    echo Spark 2.4 session ended. Returning to menu...
+    goto main_menu
 
 ) else (
-    echo ERROR: Invalid choice '%choice%'. Please enter 1 or 2.
-    pause
-    exit /b 1
+    echo ERROR: Invalid choice '%choice%'. Please enter 1, 2, or 3.
+    goto main_menu
 )
 
-echo.
-echo Spark session ended.
-echo.
-pause 

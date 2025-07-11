@@ -430,14 +430,65 @@ project/project/
 .scala-build/
 
 # Project-specific: Large datasets and generated files
-data/sourced/*.dat
-data/sourced/*.binary
-data/sourced/*.csv
-!data/sourced/sample_higgs.csv
-data/generated/*
-!data/generated/*.txt
+# Keep only the 4 essential sample files for experiments
+
+# Ignore all data files by default, then allow specific sample files
+data/sourced/*
+
+# Allow only the 4 sample files needed for experiments
+!data/sourced/rcv1_train15k.binary
+!data/sourced/rcv1_test10k.binary
+!data/sourced/higgs_train15k.binary
+!data/sourced/higgs_test10k.binary
+
+# Allow essential configuration and documentation
+!data/sourced/get-data/
+!data/sourced/.gitignore
+
+# Allow generated experimental results to be committed for documentation
+# data/generated/*
 !data/generated/.gitkeep
+!data/generated/*.txt
 data/checkpoints/
 
 # Docker volumes and logs
 docker/volumes/
+
+# LaTeX files in root directory
+*.tex
+Report drafting.*
+references.bib
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.idx
+*.ind
+*.ilg
+*.glo
+*.gls
+*.glg
+*.acn
+*.acr
+*.alg
+*.ist
+*.loa
+*.nav
+*.snm
+*.vrb
+*.xdv
+*.bcf
+*.run.xml
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+
+# Project-specific analysis and results files
+results_and_limitations.md

@@ -1,0 +1,26 @@
+Dataset: HIGGS
+Loading training data from: /workspace/data/sourced/higgs_train15k.binary
+Loading test data from: /workspace/data/sourced/higgs_test10k.binary
+Using optimized samples with automatic rho updating (μ=10, τ^incr=2, τ^decr=2)
+Training: 15000 samples, Testing: 10000 samples, Features: 27
+Training label distribution: Map(-1.0 -> 7159, 1.0 -> 7841)
+
+============================================================
+STARTING ADMM TRAINING
+============================================================
+
+============================================================
+ADMM RESULTS
+============================================================
+Training Dataset: higgs_train15k.binary (15000 samples)
+Test Dataset: higgs_test10k.binary (10000 samples)
+Features: 27
+Runtime: 189.6 seconds
+Accuracy: 61.70%
+Iterations: 19
+Parameters: λ=0.01, Partitions=8
+Model L2 norm: 0.883511, Non-zero weights: 27/27
+============================================================
+
+MODEL WEIGHTS:
+-0.004267187897398409,0.025662123006949204,-0.26209558953077783,-0.0020689118390320727,0.3538497052597817,0.01835676327172535,-0.018043764348132135,0.0567417079682337,0.174970662727602,0.0086233948757868,-0.0032790553839395875,-0.04477813536489538,0.1174054106347006,-0.010448845556180917,0.013879674445651757,-0.03912923850233263,0.18863653803747665,0.01330971106295857,-6.871352832119728E-4,-0.03306864075805642,0.01740234962254658,0.14202993758963603,0.1909308719770703,0.14048135560541633,-0.5568279947263032,-0.07357974076235295,-0.3237468098991342
