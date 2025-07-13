@@ -1,11 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
-echo ========================================
-echo Spark Docker Launcher
-echo ========================================
 
-REM Simplified configuration - using conservative settings for all laptops/desktops
+echo Spark Docker Launcher
+echo _________________________
+
 
 :main_menu
 echo.
@@ -162,9 +161,9 @@ if "%choice%"=="1" (
     echo Using compose file: !COMPOSE_FILE!
     echo.
 
-    echo ========================================
+
     echo Starting all Spark 4.0 services...
-    echo ========================================
+    echo __________________________________
     docker compose -f "!COMPOSE_FILE!" up -d spark-master-40 spark-worker-40 spark40
     if errorlevel 1 (
         echo ERROR: Failed to start the Spark 4.0 services. Please check Docker.
@@ -212,17 +211,16 @@ if "%choice%"=="1" (
     
     timeout /t 5 /nobreak >nul
     
-    echo ========================================
+
     echo Connecting to the Spark 4.0 Scala shell...
-    echo ========================================
+    echo __________________________________
     
     REM Use docker exec for reliable connection
     docker exec -it spark-4.0-env spark-shell
     
     echo.
-    echo ========================================
     echo Shutting down all Spark 4.0 services...
-    echo ========================================
+    echo __________________________________
     docker compose -f "!COMPOSE_FILE!" down
     
     echo.
@@ -240,9 +238,9 @@ if "%choice%"=="1" (
     echo Using compose file: !COMPOSE_FILE!
     echo.
 
-    echo ========================================
+
     echo Starting all Spark services...
-    echo ========================================
+    echo __________________________________
     docker compose -f "!COMPOSE_FILE!" up -d
     if errorlevel 1 (
         echo ERROR: Failed to start the Spark services. Please check Docker.
@@ -290,17 +288,15 @@ if "%choice%"=="1" (
     
     timeout /t 5 /nobreak >nul
     
-    echo ========================================
     echo Connecting to the Spark 2.4 Scala shell...
-    echo ========================================
+    echo __________________________________
     
     REM Use docker exec for reliable connection
     docker exec -it spark-2.4-env spark-shell
     
     echo.
-    echo ========================================
     echo Shutting down all Spark services...
-    echo ========================================
+    echo __________________________________
     docker compose -f "!COMPOSE_FILE!" down
     
     echo.

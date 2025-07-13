@@ -11,15 +11,16 @@ import breeze.optimize.{DiffFunction, LBFGS}
 import java.io.PrintWriter
 
 /**
- * SPARK 4.0 COMPATIBLE VERSION OF SuADMM
- * ================================================
+ * Spark 4.0 Compatible Version of SuADMM
+ * ______________________________________
  * This version fixes compatibility issues with Spark 4.0 and Scala 2.13:
  * - Resolves printf conflicts by using println with string interpolation
  * - Updates deprecated APIs where necessary
  * - Maintains all original ADMM functionality
  * 
- * 1. DATA STRUCTURES & INTERFACES
- * ================================================
+ * 
+ * 1. Data Structures & Interfaces
+ * ______________________________________
  */
 
 // local state for each partition in ADMM
@@ -74,8 +75,8 @@ trait ADMMUpdater_40 extends Serializable {
 
 /**
  *
- * 2. L2-REGULARIZED LOGISTIC REGRESSION
- * ============================================================================================
+ * 2. L2-Regularized Logistic Regression
+ * ______________________________________
  * Implements the ADMMUpdater trait for L2-Regularized Logistic Regression (SquaredL2Updater in the diagram).
  * This class contains the specific mathematical formulas for the problem.
  *
@@ -233,8 +234,8 @@ class SquaredL2Updater_40(val regularizationParam_lambda: Double) extends ADMMUp
 
 
 /**
- * 3. EXECUTION LOGIC
- * ================================================
+ * 3. Execution Logic
+ * ______________________________________
  */
 
 // main ADMM optimizer that coordinates the distributed process
@@ -379,9 +380,8 @@ class LogisticRegressionWithADMM_40(
 
 
 /**
- * ============================================================================================
- * 4. RUNNER OBJECT
- * ============================================================================================
+ * 4. Runner Object
+ * ______________________________________
  */
 
 /**
@@ -435,9 +435,8 @@ object ADMMRunner_40 {
 }
 
 /**
- * ============================================================================================
- * 5. CONVENIENCE FUNCTIONS FOR SPARK SHELL (SPARK 4.0 COMPATIBLE)
- * ============================================================================================
+ * 5. Convenience Functions
+ * ______________________________________
  */
 
 // custom data loading that handles both 0-based and 1-based feature indices
@@ -478,9 +477,8 @@ def loadDataSmart(sc: SparkContext, path: String, isHiggs: Boolean): RDD[org.apa
 }
 
 /**
- * ============================================================================================
- * 6. ACCURACY EVALUATION FUNCTIONS (KEY FOR PAPER REPRODUCTION)
- * ============================================================================================
+ * 6. Accuracy Evaluation Functions
+ * ______________________________________
  */
 
 /**
@@ -652,6 +650,47 @@ def runADMM(
   val runNumber = getNextRunNumber(basePattern)
   val out = s"/workspace/data/generated/${basePattern}_${runNumber}_${numPartitions}part_output.txt"
   
+  // CSV Export for Data Analysis
+  val csvOut = s"/workspace/data/generated/${basePattern}_${runNumber}_${numPartitions}part_metrics.csv"
+  val timestamp = java.time.LocalDateTime.now().toString
+  val convergenceStatus = if (iterations < maxIterations) "converged" else "max_iterations"
+  val nonZeroPercent = (nonZeroWeights.toDouble / model.length.toDouble) * 100.0
+  
+  val csvData = Seq(
+    s"$timestamp",
+    dataset.toLowerCase,
+    "admm",
+    sparkVersion,
+    s"$nTrainSamples",
+    s"$nTestSamples", 
+    s"$nFeatures",
+    s"$numPartitions",
+    s"$lambda",
+    s"$maxIterations",
+    s"$iterations",
+    f"$runtimeSec%.3f",
+    f"$accuracy%.2f",
+    f"$modelNorm%.6f",
+    s"$nonZeroWeights",
+    s"${model.length}",
+    f"$nonZeroPercent%.2f",
+    convergenceStatus,
+    finalTrainFile,
+    finalTestFile
+  ).mkString(",")
+  
+  // Write CSV header if file doesn't exist
+  val csvFile = new java.io.File(csvOut)
+  val isNewFile = !csvFile.exists()
+  new PrintWriter(new java.io.FileWriter(csvOut, true)) {
+    if (isNewFile) {
+      write("timestamp,dataset,algorithm,spark_version,train_samples,test_samples,features,partitions,lambda,max_iterations,actual_iterations,runtime_sec,accuracy_percent,model_norm,non_zero_weights,total_weights,non_zero_percent,convergence_status,train_file,test_file\n")
+    }
+    write(csvData + "\n")
+    close()
+  }
+  println(s"CSV metrics saved to: $csvOut")
+  
   new PrintWriter(out) { write(output.toString()); close() }
   println(s"Complete output saved to: $out")
 
@@ -814,6 +853,47 @@ def runLBFGS(
   val runNumber = getNextRunNumber(basePattern)
   val out = s"/workspace/data/generated/${basePattern}_${runNumber}_${numPartitions}part_output.txt"
   
+  // CSV Export for analysis in a jupyter notebook
+  val csvOut = s"/workspace/data/generated/${basePattern}_${runNumber}_${numPartitions}part_metrics.csv"
+  val timestamp = java.time.LocalDateTime.now().toString
+  val convergenceStatus = "max_iterations"  // LBFGS uses fixed iterations
+  val nonZeroPercent = (nonZeroWeights.toDouble / modelWeights.length.toDouble) * 100.0
+  
+  val csvData = Seq(
+    s"$timestamp",
+    dataset.toLowerCase,
+    "lbfgs",
+    sparkVersion,
+    s"$nTrainSamples",
+    s"$nTestSamples", 
+    s"$nFeatures",
+    s"$numPartitions",
+    s"$regParam",
+    s"$maxIterations",
+    s"$maxIterations",  
+    f"$runtimeSec%.3f",
+    f"$accuracy%.2f",
+    f"$modelNorm%.6f",
+    s"$nonZeroWeights",
+    s"${modelWeights.length}",
+    f"$nonZeroPercent%.2f",
+    convergenceStatus,
+    finalTrainFile,
+    finalTestFile
+  ).mkString(",")
+  
+  // write CSV header if file doesn't exist
+  val csvFile = new java.io.File(csvOut)
+  val isNewFile = !csvFile.exists()
+  new PrintWriter(new java.io.FileWriter(csvOut, true)) {
+    if (isNewFile) {
+      write("timestamp,dataset,algorithm,spark_version,train_samples,test_samples,features,partitions,lambda,max_iterations,actual_iterations,runtime_sec,accuracy_percent,model_norm,non_zero_weights,total_weights,non_zero_percent,convergence_status,train_file,test_file\n")
+    }
+    write(csvData + "\n")
+    close()
+  }
+  println(s"CSV metrics saved to: $csvOut")
+  
   new PrintWriter(out) { write(output.toString()); close() }
   println(s"Complete output saved to: $out")
 
@@ -823,6 +903,50 @@ def runLBFGS(
   
   // return the trained model weights
   model.weights
+}
+
+// This function combines all CSV metrics files into one comprehensive file
+def combineCSVMetrics(outputFile: String = "/workspace/data/generated/combined_metrics.csv"): Unit = {
+  val outputDir = new java.io.File("/workspace/data/generated")
+  if (!outputDir.exists()) {
+    println("No generated data directory found")
+    return
+  }
+  
+  val csvFiles = outputDir.listFiles()
+    .filter(_.getName.endsWith("_metrics.csv"))
+    .sortBy(_.getName)
+  
+  if (csvFiles.isEmpty) {
+    println("No CSV metrics files found")
+    return
+  }
+  
+  println(s"Found ${csvFiles.length} CSV metrics files")
+  
+  val combinedData = new StringBuilder()
+  var headerWritten = false
+  
+  for (file <- csvFiles) {
+    val lines = scala.io.Source.fromFile(file).getLines().toList
+    if (lines.nonEmpty) {
+      if (!headerWritten) {
+        // Write header from first file
+        combinedData.append(lines.head + "\n")
+        headerWritten = true
+      }
+      // Write data lines (skip header)
+      lines.tail.foreach(line => combinedData.append(line + "\n"))
+    }
+  }
+  
+  new PrintWriter(outputFile) { 
+    write(combinedData.toString())
+    close() 
+  }
+  
+  println(s"Combined ${csvFiles.length} CSV files into: $outputFile")
+  println("Columns: timestamp, dataset, algorithm, spark_version, train_samples, test_samples, features, partitions, lambda, max_iterations, actual_iterations, runtime_sec, accuracy_percent, model_norm, non_zero_weights, total_weights, non_zero_percent, convergence_status, train_file, test_file")
 }
 
  

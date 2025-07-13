@@ -492,3 +492,7 @@ references.bib
 
 # Project-specific analysis and results files
 results_and_limitations.md
+
+# Combine CSV files (generated scripts)
+combine_csv.bat
+combine_csv.py
