@@ -57,14 +57,12 @@ Spark 2.4.8:
 
 4. **Running experiments:**
    
-   ```scala
-   // ADMM test
-   runADMM()
-   ```
+```scala
+// ADMM test
+runADMM()
 
 // MLlib LBFGS baseline test
 runLBFGS()
-
 ```
 **Dataset Selection:**
 ```scala
