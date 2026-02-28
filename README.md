@@ -1,6 +1,6 @@
 # An Empirical Evaluation of The Efficacy of an ADMM Classification Technique in Modern Spark
 
-This repository contains the source code, data, and analysis for a CS 7265 Big Data Analytics group project. The timeline for this project is 6 weeks. 
+This repository contains the source code, data, and analysis for a graduate Big Data Analytics group project. The timeline for this project is 6 weeks. 
 
 **Based on the paper:** [Efficient Logistic Regression with L2 Regularization using ADMM on Spark (Su, 2020)](https://dl.acm.org/doi/10.1145/3409073.3409077)
 
